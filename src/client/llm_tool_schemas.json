@@ -1,0 +1,140 @@
+[
+  {
+    "name": "start_negotiation",
+    "description": "Start a 1-on-1 negotiation session with a counterparty agent. This will run the full negotiation loop until completion (deal reached, cancelled, or max rounds). The negotiation agent you configured will handle decisions within the session.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "counterparty_endpoint": {
+          "type": "string",
+          "description": "A2A endpoint URL of the counterparty agent (e.g., 'http://seller:8001')"
+        },
+        "item": {
+          "type": "object",
+          "description": "Item to negotiate. Must include: id, name, description. Optional: category, metadata",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Unique item identifier"
+            },
+            "name": {
+              "type": "string",
+              "description": "Item name"
+            },
+            "description": {
+              "type": "string",
+              "description": "Item description"
+            },
+            "category": {
+              "type": "string",
+              "description": "Item category (optional)"
+            },
+            "metadata": {
+              "type": "object",
+              "description": "Additional item metadata (optional)"
+            }
+          },
+          "required": ["id", "name", "description"]
+        },
+        "role": {
+          "type": "string",
+          "enum": ["buyer", "seller"],
+          "description": "Your role in the negotiation"
+        },
+        "max_rounds": {
+          "type": "integer",
+          "description": "Maximum negotiation rounds before giving up (optional, default: 100)"
+        },
+        "timeout": {
+          "type": "number",
+          "description": "Session timeout in seconds (optional)"
+        }
+      },
+      "required": ["counterparty_endpoint", "item", "role"]
+    }
+  },
+  {
+    "name": "start_auction",
+    "description": "Start a multi-party auction session with multiple participants. The auction will run for the specified number of rounds, collecting bids from all participants, then determine a winner.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "counterparty_endpoints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of participant A2A endpoint URLs"
+        },
+        "item": {
+          "type": "object",
+          "description": "Item to auction. Must include: id, name, description",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "category": {
+              "type": "string"
+            },
+            "metadata": {
+              "type": "object"
+            }
+          },
+          "required": ["id", "name", "description"]
+        },
+        "role": {
+          "type": "string",
+          "enum": ["buyer", "seller"],
+          "description": "Your role in the auction"
+        },
+        "rounds": {
+          "type": "integer",
+          "description": "Number of bidding rounds (default: 1)"
+        },
+        "round_duration": {
+          "type": "number",
+          "description": "Duration of each round in seconds (default: 60)"
+        }
+      },
+      "required": ["counterparty_endpoints", "item", "role"]
+    }
+  },
+  {
+    "name": "get_session_status",
+    "description": "Get the current status of a session including state, role, and item info",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "description": "Session ID to query"
+        }
+      },
+      "required": ["session_id"]
+    }
+  },
+  {
+    "name": "list_active_sessions",
+    "description": "List all currently active sessions with their basic info",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "list_remote_agents",
+    "description": "List all connected remote agents that can be contacted for negotiations or auctions",
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  }
+]

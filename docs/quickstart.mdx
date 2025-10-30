@@ -1,0 +1,86 @@
+---
+title: Quick Start
+description: 'Get started with Shaket in 5 minutes'
+---
+
+## Installation
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/bwuzhang/shaket
+    cd shaket
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    ```bash
+    pip install -r requirements.txt
+    ```
+  </Step>
+
+  <Step title="Set up environment (for LLM agents)">
+    ```bash
+    cp .env.example .env
+    # Edit .env and add your API keys
+    ```
+  </Step>
+</Steps>
+
+## Run Your First Reverse Auction
+
+Run a reverse auction where 5 sellers compete to offer the best price:
+
+```bash
+python examples/powerbank_reverse_auction.py
+```
+
+### What happens:
+- Buyer initiates a 3-round auction for a power bank
+- 5 sellers with different strategies (aggressive, conservative, balanced, last-minute) submit offers
+- Each round, sellers see market feedback (min/max/avg prices) and adjust their bids
+- Winner is determined by the lowest final price
+
+### Expected Output:
+```
+🔄 Round 1/3
+   💚 Seller_E  [aggressive  ] $ 85.00 (initial)
+   💚 Seller_A  [aggressive  ] $ 95.00 (initial)
+   ...
+
+🔄 Round 2/3
+   💚 Seller_E  [aggressive  ] $ 85.00 → $ 81.08 (-$3.92)
+   ...
+
+🎯 BEST OFFER: $76.44 from Seller_E
+```
+
+## Run LLM-Powered Negotiation
+
+Run an intelligent negotiation using LLMs:
+
+```bash
+python examples/powerbank_negotiation_llm.py
+```
+
+### What happens:
+- Buyer and seller agents use LLMs (via LiteLLM) to make decisions
+- Agents analyze market conditions, opponent offers, and negotiate intelligently
+- Multi-round back-and-forth until agreement or max rounds reached
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Core Concepts" icon="book" href="/concepts/overview">
+    Learn about sessions, coordinators, and state management
+  </Card>
+  <Card title="Integration Guide" icon="plug" href="/integration/bring-your-own-agent">
+    Integrate your agent with Shaket
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/client">
+    Explore the complete API
+  </Card>
+  <Card title="Examples" icon="flask" href="/examples/reverse-auction">
+    More detailed examples and patterns
+  </Card>
+</CardGroup>
