@@ -1,32 +1,26 @@
 # Shaket Protocol
 
 [![Apache License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/shaketlabs/shaket)
 
-**Shaket** is an **open protocol for multi-agent negotiation and auction** built on the [Agent2Agent (A2A) protocol](https://github.com/a2a-protocol/a2a).
+**Shaket** is an **open protocol for multi-agent negotiation and auction**.
 
-Enable autonomous agents to negotiate deals and run competitive auctions with structured coordination, state management, and A2A-based communication. Shaket fills a critical gap by enabling AI agents representing different parties with conflicting interests to interact. Shaket handles the protocol layer - you bring your agent's intelligence.
+Shaket enables AI agents representing different parties (buyers, sellers, companies etc.) with conflicting interests to engage in negotiation and run competitive auctions with structured coordination, state management, and [Agent2Agent (A2A)](https://github.com/a2a-protocol/a2a) compatible communication. With Shaket, you can create emergent digital markets for autonomous systems.
 
 **Example Scenarios:**
-- **Automated Negotiation**: Buyer and seller agents exchange information back-and-forth for value discovery (price, best product/bundle, suitale service etc.)
-- **Rapid Reverse Auction**: One buyer agent coordinates with 100 seller agents in a 5-minute competitive bidding process to find the best product
+- **Automated Negotiation**: Buyer and seller agents exchange information back-and-forth for value discovery (price, best product/bundle, suitable service etc.)
+- **Rapid Reverse Auction**: One buyer agent coordinates with 100 sellers in a 5-minute competitive bidding process to find the best product
 
-## Features
+> [!IMPORTANT]
+> Shaket **does not make decisions**. The protocol coordinates communication and state, but user's agent or the user makes all strategic decisions about offers, bids, and acceptances. Shaket provides the infrastructure to create structured markets - You bring the intelligence. 
 
-- 🤝 **Multi-Party Negotiation Protocol**: Coordinate agents negotiating prices and terms
-- 🏷️ **Reverse Auction Protocol**: Manage buyer-initiated auctions with multiple competing sellers
-- 🔄 **Extensible Transaction Types**: Define custom coordinators easily for other transaction patterns
-- 🔌 **Framework Agnostic**: Works with LangChain, CrewAI, Claude SDK, or any custom agent
-- 📊 **Event-Driven State Management**: Track all negotiation/auction events with full audit trail
-- 🌐 **A2A Protocol**: Standards-based agent communication using the A2A SDK
-- 🚀 **Async by Design**: Built on async Python for high-performance concurrent operations
-- 🔧 **Simple Integration**: Implement one `decide_next_action()` method to plug in your agent
 
 ## Architecture
 
-### Negotiation Flow
+### 1-to-1 Negotiation Scenario
 ![Shaket Negotiation Architecture](docs/images/shaket-negotiation.png)
 
-### Reverse Auction Flow
+### 1-to-N Reverse Auction Scenario
 ![Shaket Reverse Auction Architecture](docs/images/shaket-reverse-auction.png)
 
 ### Core Components
@@ -37,10 +31,20 @@ Enable autonomous agents to negotiate deals and run competitive auctions with st
 - **StateManager**: Event-driven state store with full audit trail
 - **SessionMessenger**: Abstraction layer for sending A2A messages to multiple contexts
 
-## Installation
+## Features
+
+- 🤝 **Multi-Party Negotiation**: Coordinate agents negotiating prices and terms
+- 🏷️ **Reverse Auction**: Manage buyer-initiated auctions with multiple competing sellers
+- 💱 **Extensible Transaction Types**: Define custom coordinators for other transaction patterns
+- 🔌 **Framework Agnostic**: Works with any agent building framework
+- 📍 **State Management**: Track all events with full audit trail
+- 🔄 **A2A Compatible**: Fully compatible with A2A
+
+
+## Quick Start
 
 ```bash
-cd shaket_opensource
+cd shaket
 
 # Install dependencies
 pip install -r requirements.txt
@@ -49,8 +53,6 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env and add your API keys
 ```
-
-## Quick Start
 
 ### 1. Reverse Auction Example
 
