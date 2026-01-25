@@ -23,12 +23,10 @@ from typing import Optional
 import uvicorn
 from dotenv import load_dotenv
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from src.core.types import Item, SessionType, AgentRole
-from src.client import ShaketClient
-from src.server import ShaketServer
-from src.agents import (
+from shaket.core.types import Item, SessionType, AgentRole
+from shaket.client import ShaketClient
+from shaket.server import ShaketServer
+from shaket.agents import (
     SendOfferAction,
     AcceptOfferAction,
     SendDiscoveryAction,

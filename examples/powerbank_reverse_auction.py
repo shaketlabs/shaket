@@ -17,22 +17,20 @@ from threading import Thread
 
 import uvicorn
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from src.core.types import Item, SessionType, AgentRole
-from src.client import ShaketClient
-from src.server import ShaketServer
-from src.agents import SendOfferAction, SendDiscoveryAction
+from shaket.core.types import Item, SessionType, AgentRole
+from shaket.client import ShaketClient
+from shaket.server import ShaketServer
+from shaket.agents import SendOfferAction, SendDiscoveryAction
 
 logging.basicConfig(level=logging.WARNING, format="%(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # Set log levels for different components - only show user-facing logs
-logging.getLogger("src.coordinators.reverse_auction").setLevel(logging.INFO)
-logging.getLogger("src.client").setLevel(logging.WARNING)
-logging.getLogger("src.server").setLevel(logging.WARNING)
-logging.getLogger("src.state.state_manager").setLevel(logging.WARNING)
+logging.getLogger("shaket.coordinators.reverse_auction").setLevel(logging.INFO)
+logging.getLogger("shaket.client").setLevel(logging.WARNING)
+logging.getLogger("shaket.server").setLevel(logging.WARNING)
+logging.getLogger("shaket.state.state_manager").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 

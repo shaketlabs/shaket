@@ -168,6 +168,18 @@ class NegotiationCoordinator(Coordinator):
                         else None
                     )
 
+                    # Emit event to record that WE are accepting their offer
+                    self.state_manager.emit_event(
+                        session_id=session_id,
+                        event_type=EventType.OFFER_ACCEPTED,
+                        data={
+                            "action_data": {
+                                "offer_id": action.offer_id,
+                                "message": action.message,
+                            }
+                        },
+                    )
+
                     response = await messenger.accept_offer(
                         offer_id=action.offer_id,
                         message=action.message,
@@ -183,7 +195,6 @@ class NegotiationCoordinator(Coordinator):
                         session_id=session_id,
                         status="completed",
                         reason="Offer accepted",
-                        accepted_price=accepted_price,
                     )
 
                 elif isinstance(action, SendDiscoveryAction):
