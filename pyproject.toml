@@ -22,9 +22,13 @@ dependencies = [
     "pydantic>=2.5.0",
     "uvicorn>=0.27.0",
     "fastapi>=0.95.0",
-    "litellm",
     "python-dotenv",
     "a2a-sdk[http-server]>=0.3.0",
+]
+
+[project.optional-dependencies]
+examples = [
+    "litellm",
 ]
 
 [tool.setuptools.packages.find]
