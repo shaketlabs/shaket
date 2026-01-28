@@ -45,9 +45,6 @@ class SessionState(ABC):
     role: AgentRole
     """This agent's role (buyer/seller)"""
 
-    item: Item
-    """Item being traded/negotiated"""
-
     # Optional context_id (comes after required fields)
     context_id: Optional[str] = None
     """
@@ -91,6 +88,40 @@ class SessionState(ABC):
     {
         "ctx-seller": {"endpoint": "http://...", "name": "Seller Agent"},
     }
+    """
+
+    # ========================================================================
+    # ITEM TRACKING
+    # ========================================================================
+
+    items_per_seller: Dict[str, Item] = field(default_factory=dict)
+    """
+    Items mapped to seller endpoints.
+    Format: {endpoint: Item}
+
+    For negotiation (1-on-1): Single entry mapping seller endpoint to item
+    For reverse auction (multi-party): Multiple entries, one per seller
+
+    Example for negotiation:
+    {
+        "http://seller:8001": Item(id="laptop-1", name="Laptop", ...),
+    }
+
+    Example for auction:
+    {
+        "http://seller-a:8001": Item(id="helmet-a", name="Helmet Model X", ...),
+        "http://seller-b:8002": Item(id="helmet-b", name="Helmet Model Y", ...),
+    }
+    """
+
+    item: Optional[Item] = None
+    """
+    The item this agent is selling/buying in this session.
+
+    - For sellers (servers): Set to their specific item after INIT
+    - For coordinators (buyers): Remains None (use items_per_seller instead)
+
+    This allows sellers to easily reference "their" item when creating offers.
     """
 
     # ========================================================================
@@ -156,6 +187,33 @@ class SessionState(ABC):
         """
         cp_data = self.counterparties.get(context_id)
         return cp_data["endpoint"] if cp_data else None
+
+    def get_seller_item(self, endpoint: str) -> Optional[Item]:
+        """
+        Get the item associated with a specific seller endpoint.
+
+        Args:
+            endpoint: Seller endpoint URL
+
+        Returns:
+            Item for that seller, or None if not found
+        """
+        return self.items_per_seller.get(endpoint)
+
+    def get_item_seller(self, item_id: str) -> Optional[str]:
+        """
+        Get the seller endpoint for a given item_id.
+
+        Args:
+            item_id: ID of the item
+
+        Returns:
+            Seller endpoint URL, or None if not found
+        """
+        for endpoint, item in self.items_per_seller.items():
+            if item.id == item_id:
+                return endpoint
+        return None
 
     def apply_event(self, event: "Event"):  # type: ignore
         """
@@ -358,7 +416,11 @@ class NegotiationState(SessionState):
             "context_id": self.context_id,
             "session_type": self.session_type.value,
             "role": self.role.value,
-            "item": self.item.to_dict(),
+            "items_per_seller": {
+                endpoint: item.to_dict()
+                for endpoint, item in self.items_per_seller.items()
+            },
+            "item": self.item.to_dict() if self.item else None,
             "status": self.status,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
@@ -539,7 +601,11 @@ class ReverseAuctionState(SessionState):
             "context_id": self.context_id,
             "session_type": self.session_type.value,
             "role": self.role.value,
-            "item": self.item.to_dict(),
+            "items_per_seller": {
+                endpoint: item.to_dict()
+                for endpoint, item in self.items_per_seller.items()
+            },
+            "item": self.item.to_dict() if self.item else None,
             "status": self.status,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),

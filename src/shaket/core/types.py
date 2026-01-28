@@ -38,6 +38,7 @@ class Item:
     description: str
     category: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    seller_endpoint: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -47,6 +48,7 @@ class Item:
             "description": self.description,
             "category": self.category,
             "metadata": self.metadata,
+            "seller_endpoint": self.seller_endpoint,
         }
 
     @classmethod
@@ -58,6 +60,7 @@ class Item:
             description=data["description"],
             category=data.get("category"),
             metadata=data.get("metadata", {}),
+            seller_endpoint=data.get("seller_endpoint"),
         )
 
 

@@ -207,6 +207,7 @@ async def main(show_state: bool = False):
             "ports": 2,
             "fast_charging": True,
         },
+        seller_endpoint="http://localhost:8001",
     )
 
     # Create agents

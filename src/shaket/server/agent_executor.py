@@ -494,19 +494,24 @@ class ShaketAgentExecutor(AgentExecutor):
             f"(context: {context_id})"
         )
 
-        # Parse item from action_data
+        # Parse item from action_data (includes seller_endpoint if set)
         item_data = action_data.get("item", {})
-        item = Item(
-            id=item_data.get("id", "unknown"),
-            name=item_data.get("name", "Unknown Item"),
-            description=item_data.get("description", ""),
-            category=item_data.get("category"),
-            metadata=item_data.get("metadata", {}),
-        )
+        item = Item.from_dict(item_data)
 
         # Determine our role (opposite of theirs)
         their_role = action_data.get("role", "buyer")
         our_role = AgentRole.SELLER if their_role == "buyer" else AgentRole.BUYER
+
+        # Create items_per_seller mapping
+        # Use seller_endpoint from item as key (this is our own endpoint)
+        items_per_seller = {}
+        if item.seller_endpoint:
+            items_per_seller[item.seller_endpoint] = item
+        else:
+            # If no seller_endpoint set, log warning but proceed
+            logger.warning(
+                f"[ShaketAgentExecutor] Item {item.id} has no seller_endpoint set"
+            )
 
         # Create session state
         state = self.state_manager.create_session(
@@ -514,11 +519,14 @@ class ShaketAgentExecutor(AgentExecutor):
             context_id=context_id,
             session_type=session_type,
             role=our_role,
-            item=item,
+            items_per_seller=items_per_seller,
         )
         if not state:
             logger.error(f"[ShaketAgentExecutor] Failed to create session {session_id}")
             return "Error: Failed to create session"
+
+        # Set this seller's item (for easy reference when creating offers)
+        state.item = item
 
         self._context_to_session[context_id] = session_id
 

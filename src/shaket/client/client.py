@@ -97,6 +97,7 @@ class ShaketClient:
         httpx_client: Optional[httpx.AsyncClient] = None,
         negotiation_agent: Optional[NegotiationAgent] = None,
         reverse_auction_agent: Optional[ReverseAuctionAgent] = None,
+        state_manager: Optional[StateManager] = None,
         on_session_complete: Optional[Callable[[CoordinatorResult], None]] = None,
     ):
         """
@@ -108,6 +109,7 @@ class ShaketClient:
             httpx_client: Optional httpx client for A2A connections (created if None)
             negotiation_agent: Optional user-provided negotiation agent
             reverse_auction_agent: Optional user-provided reverse auction agent
+            state_manager: Optional custom state manager (e.g. for persistence)
             on_session_complete: Callback when session completes
                 Signature: async def callback(result: CoordinatorResult)
         """
@@ -119,7 +121,7 @@ class ShaketClient:
         self._initialized = False
 
         # Shaket layer components (shared state)
-        self.state_manager = StateManager()
+        self.state_manager = state_manager or StateManager()
 
         # Coordinators (share state with client)
         self.negotiation_coordinator = NegotiationCoordinator(
@@ -173,6 +175,7 @@ class ShaketClient:
         httpx_client: Optional[httpx.AsyncClient] = None,
         negotiation_agent: Optional[NegotiationAgent] = None,
         reverse_auction_agent: Optional[ReverseAuctionAgent] = None,
+        state_manager: Optional[StateManager] = None,
         on_session_complete: Optional[Callable[[CoordinatorResult], None]] = None,
     ) -> "ShaketClient":
         """
@@ -183,6 +186,7 @@ class ShaketClient:
             httpx_client: Optional httpx client
             negotiation_agent: Optional negotiation agent
             reverse_auction_agent: Optional reverse auction agent
+            state_manager: Optional custom state manager
             on_session_complete: Optional completion callback
 
         Returns:
@@ -193,6 +197,7 @@ class ShaketClient:
             httpx_client=httpx_client,
             negotiation_agent=negotiation_agent,
             reverse_auction_agent=reverse_auction_agent,
+            state_manager=state_manager,
             on_session_complete=on_session_complete,
         )
         await client.initialize()
@@ -271,6 +276,10 @@ class ShaketClient:
             # Get agent name from card if available
             agent_name = connection.card.name if connection.card else None
 
+            # Validate that item has seller_endpoint set
+            if not item.seller_endpoint:
+                raise ValueError(f"Item must have seller_endpoint set to counterparty endpoint: {counterparty_endpoint}")
+
             # Send init message
             action_data = {
                 "session_type": SessionType.NEGOTIATION.value,
@@ -318,14 +327,15 @@ class ShaketClient:
                 )
                 context_id = session_id
 
-            # Create session state
+            # Create session state with items_per_seller (single entry for negotiation)
             agent_role = AgentRole.BUYER if role == "buyer" else AgentRole.SELLER
+            items_per_seller = {counterparty_endpoint: item}
             state = self.state_manager.create_session(
                 session_id=session_id,
                 context_id=context_id,
                 session_type=SessionType.NEGOTIATION,
                 role=agent_role,
-                item=item,
+                items_per_seller=items_per_seller,
             )
 
             # Add counterparty via event
@@ -388,7 +398,7 @@ class ShaketClient:
     async def start_reverse_auction(
         self,
         counterparty_endpoints: List[str],
-        item: Item,
+        items_per_counterparty: Dict[str, Item],
         role: str,  # "buyer" or "seller"
         rounds: int = 1,
         round_duration: float = 60,
@@ -401,7 +411,7 @@ class ShaketClient:
 
         Args:
             counterparty_endpoints: List of participant endpoints
-            item: Item for reverse auction
+            items_per_counterparty: Dict mapping endpoint to Item for that counterparty
             role: Your role ("buyer" or "seller")
             rounds: Number of rounds
             round_duration: Duration per round in seconds
@@ -417,19 +427,13 @@ class ShaketClient:
         try:
             session_id = f"reverse-auction-{uuid.uuid4().hex[:12]}"
 
-            # Send init to all participants
-            action_data = {
-                "session_type": SessionType.REVERSE_AUCTION.value,
-                "item": item.to_dict(),
-                "role": role,
-                "session_config": {
-                    "rounds": rounds,
-                    "round_duration": round_duration,
-                },
-            }
-
             contexts = []
             for idx, endpoint in enumerate(counterparty_endpoints):
+                # Get seller-specific item
+                seller_item = items_per_counterparty.get(endpoint)
+                if not seller_item:
+                    raise ValueError(f"No item provided for seller endpoint: {endpoint}")
+
                 # Get or create connection
                 connection = self.connection_manager.get_connection(endpoint)
                 if not connection:
@@ -437,6 +441,17 @@ class ShaketClient:
                         agent_url=endpoint, fetch_card=True
                     )
                     logger.info(f"[ShaketClient] Added connection to {endpoint}")
+
+                # Send init with seller-specific item
+                action_data = {
+                    "session_type": SessionType.REVERSE_AUCTION.value,
+                    "item": seller_item.to_dict(),
+                    "role": role,
+                    "session_config": {
+                        "rounds": rounds,
+                        "round_duration": round_duration,
+                    },
+                }
 
                 message = create_action_message(
                     action=ActionType.INIT,
@@ -490,7 +505,7 @@ class ShaketClient:
                 context_id=None,  # No single context for multi-party reverse auction
                 session_type=SessionType.REVERSE_AUCTION,
                 role=agent_role,
-                item=item,
+                items_per_seller=items_per_counterparty,
                 total_rounds=rounds,
                 round_duration=round_duration,
                 expected_participants=len(counterparty_endpoints),

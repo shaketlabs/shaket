@@ -132,9 +132,21 @@ class NegotiationCoordinator(Coordinator):
                         f"[NegotiationCoordinator] Sending offer: ${action.price}"
                     )
 
+                    # Get item_id (handle both buyer and seller cases)
+                    item_id = None
+                    if state.item:
+                        item_id = state.item.id
+                    elif state.items_per_seller:
+                        # For buyer, get item from the single seller
+                        # negotiation is 1-on-1, so just take the first one
+                        item = next(iter(state.items_per_seller.values()))
+                        item_id = item.id
+                    else:
+                        logger.warning("[NegotiationCoordinator] No item found in state for offer creation")
+                        
                     offer = Offer.create(
                         price=action.price,
-                        item_id=state.item.id,
+                        item_id=item_id,
                         message=action.message,
                         metadata=action.metadata,
                     )

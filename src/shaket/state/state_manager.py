@@ -56,10 +56,10 @@ class StateManager:
     def create_session(
         self,
         session_id: str,
-        context_id: str,
+        context_id: Optional[str],
         session_type: SessionType,
         role: AgentRole,
-        item: Item,
+        items_per_seller: Optional[Dict[str, Item]] = None,
         **kwargs,
     ) -> SessionState:
         """
@@ -71,10 +71,10 @@ class StateManager:
 
         Args:
             session_id: Unique session ID
-            context_id: Primary A2A context ID
+            context_id: Primary A2A context ID (None for multi-party sessions like reverse auctions)
             session_type: Type of session
             role: This agent's role (buyer/seller)
-            item: Item being traded
+            items_per_seller: Dict mapping endpoint to Item for that seller
             **kwargs: Session-type-specific fields
 
         Returns:
@@ -90,30 +90,34 @@ class StateManager:
             context_id=context_id,
             session_type=session_type,
             role=role,
-            item=item,
+            items_per_seller=items_per_seller or {},
             **kwargs,
         )
 
         # Store state
         self._states[session_id] = state
 
-        # Map primary context to session
-        self._context_to_session[context_id] = session_id
+        # Map primary context to session (if provided)
+        if context_id:
+            self._context_to_session[context_id] = session_id
 
         # Initialize event log
         self._events[session_id] = []
 
         # Emit creation event
+        event_data = {
+            "context_id": context_id,
+            "session_type": session_type.value,
+            "role": role.value,
+        }
+        if items_per_seller:
+            event_data["items_count"] = len(items_per_seller)
+            event_data["item_ids"] = [item.id for item in items_per_seller.values()]
+
         self.emit_event(
             session_id=session_id,
             event_type=EventType.SESSION_CREATED,
-            data={
-                "context_id": context_id,
-                "session_type": session_type.value,
-                "role": role.value,
-                "item_id": item.id,
-                "item_name": item.name,
-            },
+            data=event_data,
             context_id=context_id,
         )
 

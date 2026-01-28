@@ -295,18 +295,17 @@ async def main(show_state: bool = False):
     print("POWER BANK REVERSE AUCTION SIMULATION")
     print("=" * 70 + "\n")
 
-    # Define the item
-    power_bank = Item(
-        id="pb-anker-20k",
-        name="Anker PowerCore 20000mAh Power Bank",
-        description="High-capacity portable charger with dual USB ports",
-        category="electronics",
-        metadata={
+    # Define the base item properties (same product from different sellers)
+    power_bank_base = {
+        "name": "Anker PowerCore 20000mAh Power Bank",
+        "description": "High-capacity portable charger with dual USB ports",
+        "category": "electronics",
+        "metadata": {
             "brand": "Anker",
             "capacity": "20000mAh",
             "condition": "new",
         },
-    )
+    }
 
     # Create 5 seller agents with different strategies
     sellers_config = [
@@ -414,9 +413,23 @@ async def main(show_state: bool = False):
         on_session_complete=on_complete,
     )
 
+    # Create items_per_counterparty - one item per counterparty with their endpoint
+    seller_endpoints = [f"http://localhost:{8001+i}" for i in range(5)]
+    items_per_counterparty = {}
+    for idx, endpoint in enumerate(seller_endpoints):
+        seller_id = sellers_config[idx]["id"]
+        items_per_counterparty[endpoint] = Item(
+            id=f"pb-anker-20k-{seller_id.lower()}",
+            name=power_bank_base["name"],
+            description=power_bank_base["description"],
+            category=power_bank_base["category"],
+            metadata=power_bank_base["metadata"],
+            seller_endpoint=endpoint,
+        )
+
     # Start reverse auction
     print("Starting reverse auction...")
-    print(f"   Item: {power_bank.name}")
+    print(f"   Item: {power_bank_base['name']}")
     print(f"   💙 Buyer: Target price ${buyer_agent.target_price}")
     print(f"\n   💚 Sellers ({len(sellers_config)} competing):")
     for config in sellers_config:
@@ -427,8 +440,8 @@ async def main(show_state: bool = False):
     print(f"\n{'='*70}\n")
 
     result = await client.start_reverse_auction(
-        counterparty_endpoints=[f"http://localhost:{8001+i}" for i in range(5)],
-        item=power_bank,
+        counterparty_endpoints=seller_endpoints,
+        items_per_counterparty=items_per_counterparty,
         role="buyer",
         rounds=3,
         round_duration=5.0,  # 5 seconds per round

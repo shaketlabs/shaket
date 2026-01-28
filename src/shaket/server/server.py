@@ -52,6 +52,7 @@ class ShaketServer:
         port: int = 8000,
         version: str = "1.0.0",
         streaming: bool = False,
+        state_manager: Optional[StateManager] = None,
     ):
         """
         Initialize ShaketServer.
@@ -67,6 +68,7 @@ class ShaketServer:
             port: Port to listen on
             version: Agent version
             streaming: Whether to support streaming responses
+            state_manager: Optional custom state manager
         """
         self.name = name
         self.description = description
@@ -83,7 +85,7 @@ class ShaketServer:
         self.url = f"http://{host}:{port}"
 
         # Shaket layer components (shared state)
-        self.state_manager = StateManager()
+        self.state_manager = state_manager or StateManager()
 
         # A2A server components
         self.task_store = InMemoryTaskStore()
