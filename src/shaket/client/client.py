@@ -93,6 +93,8 @@ class ShaketClient:
 
     def __init__(
         self,
+        name: str,
+        description: str,
         remote_agent_urls: Optional[List[str]] = None,
         httpx_client: Optional[httpx.AsyncClient] = None,
         negotiation_agent: Optional[NegotiationAgent] = None,
@@ -104,6 +106,8 @@ class ShaketClient:
         Initialize Shaket Client.
 
         Args:
+            name: Client name for identification
+            description: Human-readable description
             remote_agent_urls: Optional list of remote agent URLs to connect to
                 Example: ["http://localhost:8001", "http://seller2:8002"]
             httpx_client: Optional httpx client for A2A connections (created if None)
@@ -113,6 +117,10 @@ class ShaketClient:
             on_session_complete: Callback when session completes
                 Signature: async def callback(result: CoordinatorResult)
         """
+        self.uuid = str(uuid.uuid4())
+        self.name = name
+        self.description = description
+
         # Connection manager for remote agents
         self.connection_manager = ConnectionManager(httpx_client=httpx_client)
 
@@ -128,11 +136,13 @@ class ShaketClient:
             agent=negotiation_agent,
             connection_manager=self.connection_manager,
             state_manager=self.state_manager,
+            uuid=self.uuid,
         )
         self.reverse_auction_coordinator = ReverseAuctionCoordinator(
             agent=reverse_auction_agent,
             connection_manager=self.connection_manager,
             state_manager=self.state_manager,
+            uuid=self.uuid,
         )
 
         # Callback for session completion
@@ -171,6 +181,8 @@ class ShaketClient:
     @classmethod
     async def create(
         cls,
+        name: str,
+        description: str,
         remote_agent_urls: Optional[List[str]] = None,
         httpx_client: Optional[httpx.AsyncClient] = None,
         negotiation_agent: Optional[NegotiationAgent] = None,
@@ -182,6 +194,8 @@ class ShaketClient:
         Create and initialize a ShaketClient.
 
         Args:
+            name: Client name for identification
+            description: Human-readable description
             remote_agent_urls: List of remote agent URLs to connect to
             httpx_client: Optional httpx client
             negotiation_agent: Optional negotiation agent
@@ -193,6 +207,8 @@ class ShaketClient:
             Initialized ShaketClient
         """
         client = cls(
+            name=name,
+            description=description,
             remote_agent_urls=remote_agent_urls,
             httpx_client=httpx_client,
             negotiation_agent=negotiation_agent,
@@ -300,8 +316,9 @@ class ShaketClient:
 
             send_response = await connection.send_message(message_request)
 
-            # Extract context_id from ACK response using MessageParser
+            # Extract context_id and counterparty uuid from ACK response using MessageParser
             context_id = None
+            counterparty_uuid = None
             if send_response:
                 # Parse response to get ACK message
                 parsed_messages = MessageParser.parse_response(send_response)
@@ -310,9 +327,10 @@ class ShaketClient:
                         parsed_msg.message_type == MessageType.ACTION
                         and parsed_msg.action == ActionType.ACK.value
                     ):
-                        # Extract context_id from action_data
+                        # Extract context_id and uuid from action_data
                         if parsed_msg.action_data:
                             context_id = parsed_msg.action_data.get("context_id")
+                            counterparty_uuid = parsed_msg.action_data.get("uuid")
                             if context_id:
                                 logger.info(
                                     f"[ShaketClient] Extracted context_id from server: {context_id}"
@@ -336,15 +354,19 @@ class ShaketClient:
                 session_type=SessionType.NEGOTIATION,
                 role=agent_role,
                 items_per_seller=items_per_seller,
+                emitter=self.uuid,
             )
 
             # Add counterparty via event
             counterparty_data = {
                 "endpoint": counterparty_endpoint,
                 "context_id": context_id,
+                "emitter": self.uuid,
             }
             if agent_name:
                 counterparty_data["name"] = agent_name
+            if counterparty_uuid:
+                counterparty_data["counterparty_uuid"] = counterparty_uuid
 
             self.state_manager.emit_event(
                 session_id=session_id,
@@ -466,10 +488,11 @@ class ShaketClient:
 
                 response = await connection.send_message(message_request)
 
-                # Extract context_id from ACK response
+                # Extract context_id and counterparty uuid from ACK response
                 context_id = None
+                counterparty_uuid = None
                 if response:
-                    # Parse ACK response to extract context_id
+                    # Parse ACK response to extract context_id and uuid
                     parsed_messages = MessageParser.parse_response(response)
                     for parsed_msg in parsed_messages:
                         if (
@@ -478,6 +501,7 @@ class ShaketClient:
                         ):
                             if parsed_msg.action_data:
                                 context_id = parsed_msg.action_data.get("context_id")
+                                counterparty_uuid = parsed_msg.action_data.get("uuid")
                                 if context_id:
                                     logger.info(
                                         f"[ShaketClient] Extracted context_id from participant {idx}: {context_id}"
@@ -492,7 +516,7 @@ class ShaketClient:
                         f"using fallback: {context_id}"
                     )
 
-                contexts.append(context_id)
+                contexts.append((context_id, counterparty_uuid))
 
                 # Map context for routing
                 self._context_to_session[context_id] = session_id
@@ -506,13 +530,14 @@ class ShaketClient:
                 session_type=SessionType.REVERSE_AUCTION,
                 role=agent_role,
                 items_per_seller=items_per_counterparty,
+                emitter=self.uuid,
                 total_rounds=rounds,
                 round_duration=round_duration,
                 expected_participants=len(counterparty_endpoints),
             )
 
             # Add counterparties via events
-            for idx, (endpoint, context_id) in enumerate(
+            for idx, (endpoint, (context_id, counterparty_uuid)) in enumerate(
                 zip(counterparty_endpoints, contexts)
             ):
                 # Get agent name from connection if available
@@ -522,9 +547,12 @@ class ShaketClient:
                 counterparty_data = {
                     "endpoint": endpoint,
                     "context_id": context_id,
+                    "emitter": self.uuid,
                 }
                 if agent_name:
                     counterparty_data["name"] = agent_name
+                if counterparty_uuid:
+                    counterparty_data["counterparty_uuid"] = counterparty_uuid
 
                 self.state_manager.emit_event(
                     session_id=session_id,

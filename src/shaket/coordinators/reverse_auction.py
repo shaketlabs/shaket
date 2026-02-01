@@ -16,6 +16,7 @@ from ..state.events import EventType
 from ..state.session_state import ReverseAuctionState
 from ..core.types import Offer, SessionType
 from ..protocol.messages import MessageType
+from ..agents import SendDiscoveryAction
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ class ReverseAuctionCoordinator(Coordinator):
         agent: Optional[ReverseAuctionAgent] = None,
         connection_manager=None,
         state_manager=None,
+        uuid: Optional[str] = None,
     ):
         """
         Initialize reverse auction coordinator.
@@ -49,8 +51,9 @@ class ReverseAuctionCoordinator(Coordinator):
             agent: Optional user-provided reverse auction agent
             connection_manager: Connection manager for accessing seller connections
             state_manager: Shared state manager (required)
+            uuid: UUID of the client/server that owns this coordinator
         """
-        super().__init__(agent, state_manager)
+        super().__init__(agent, state_manager, uuid)
 
         if not state_manager:
             raise ValueError(
@@ -95,6 +98,7 @@ class ReverseAuctionCoordinator(Coordinator):
                 "total_rounds": state.total_rounds,
                 "round_duration": state.round_duration,
                 "expected_participants": state.expected_participants,
+                "emitter": self.uuid,
             },
             context_id=state.context_id,
         )
@@ -163,18 +167,37 @@ class ReverseAuctionCoordinator(Coordinator):
                 f"[ReverseAuctionCoordinator] Starting round {round_num}/{state.total_rounds}"
             )
 
-            # Emit round started event
+            # 1. Emit round started event FIRST (updates state.current_round)
             self.state_manager.emit_event(
                 session_id=session_id,
                 event_type=EventType.BIDDING_ROUND_STARTED,
                 data={
                     "round_number": round_num,
                     "round_duration": state.round_duration,
+                    "emitter": self.uuid,
                 },
             )
 
-            # Send discovery message to all sellers to trigger them to send offers
-            await self._request_offers_from_sellers(session_id, round_num)
+            # 2. Consult agent for custom discovery message (if agent provided)
+            custom_discovery = None
+            if self.agent:
+                # Refresh state to get updated current_round
+                state = self.state_manager.get_session(session_id)
+                if state:
+                    try:
+                        action = await self.agent.decide_next_action(session_id, state)
+                        if isinstance(action, SendDiscoveryAction):
+                            custom_discovery = action
+                            logger.debug(
+                                f"[ReverseAuctionCoordinator] Agent provided custom discovery for round {round_num}"
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"[ReverseAuctionCoordinator] Agent error, using default discovery: {e}"
+                        )
+
+            # 3. Send discovery message to all sellers to trigger them to send offers
+            await self._request_offers_from_sellers(session_id, round_num, custom_discovery)
 
             # Wait for round duration
             await asyncio.sleep(state.round_duration)
@@ -194,6 +217,7 @@ class ReverseAuctionCoordinator(Coordinator):
                 data={
                     "round_number": round_num,
                     "offers_received": len(round_offers),
+                    "emitter": self.uuid,
                 },
             )
 
@@ -229,8 +253,19 @@ class ReverseAuctionCoordinator(Coordinator):
             reason="Reverse auction complete - all offers collected",
         )
 
-    async def _request_offers_from_sellers(self, session_id: str, round_num: int):
-        """Send discovery messages to all sellers to request offers for this round (in parallel)."""
+    async def _request_offers_from_sellers(
+        self,
+        session_id: str,
+        round_num: int,
+        custom_discovery: SendDiscoveryAction | None = None,
+    ):
+        """Send discovery messages to all sellers to request offers for this round (in parallel).
+
+        Args:
+            session_id: Session ID
+            round_num: Current round number
+            custom_discovery: Optional agent-provided discovery message
+        """
         state = self.state_manager.get_session(session_id)
         if not state or not isinstance(state, ReverseAuctionState):
             return
@@ -248,37 +283,59 @@ class ReverseAuctionCoordinator(Coordinator):
             state_manager=self.state_manager,
         )
 
-        # Compile market info from previous round as a readable string
-        market_info_message = f"Round {round_num} started - please submit your offer."
+        # Use agent-provided discovery or generate default market info
+        if custom_discovery:
+            message = custom_discovery.message
+            agent_data = custom_discovery.discovery_data or {}
+        else:
+            # Default: compile market info from previous round as a readable string
+            message = f"Round {round_num} started - please submit your offer."
+            agent_data = {}
 
-        if round_num > 1:
-            prev_round_offers = state.offers_by_round.get(round_num - 1, [])
-            if prev_round_offers:
-                prices = [o.price for o in prev_round_offers]
-                min_price = min(prices)
-                max_price = max(prices)
-                avg_price = sum(prices) / len(prices)
+            if round_num > 1:
+                prev_round_offers = state.offers_by_round.get(round_num - 1, [])
+                if prev_round_offers:
+                    prices = [o.price for o in prev_round_offers]
+                    min_price = min(prices)
+                    max_price = max(prices)
+                    avg_price = sum(prices) / len(prices)
 
-                market_info_message += (
-                    f"\n\nPrevious round (Round {round_num - 1}) market info:"
-                    f"\n- {len(prices)} offers received"
-                    f"\n- Lowest offer: ${min_price:.2f}"
-                    f"\n- Highest offer: ${max_price:.2f}"
-                    f"\n- Average offer: ${avg_price:.2f}"
-                    f"\n\nAdjust your price to be more competitive if needed."
-                )
+                    message += (
+                        f"\n\nPrevious round (Round {round_num - 1}) market info:"
+                        f"\n- {len(prices)} offers received"
+                        f"\n- Lowest offer: ${min_price:.2f}"
+                        f"\n- Highest offer: ${max_price:.2f}"
+                        f"\n- Average offer: ${avg_price:.2f}"
+                        f"\n\nAdjust your price to be more competitive if needed."
+                    )
 
+        # Build discovery_data once (same for all sellers)
+        discovery_data = {
+            "type": "round_started",
+            "round_number": round_num,
+            "total_rounds": state.total_rounds,
+            "message": message,
+            **agent_data,  # Include agent's custom fields
+        }
+        self.state_manager.emit_event(
+            session_id=session_id,
+            event_type=EventType.DISCOVERY_MESSAGE,
+            data={"discovery_data": discovery_data, "emitter": self.uuid},
+        )
         async def request_offer_from_seller(context_id: str):
             """Helper to send request to a single seller."""
             try:
+                # Emit event to record the discovery we're sending
+                self.state_manager.emit_event(
+                    session_id=session_id,
+                    event_type=EventType.DISCOVERY_SENT,
+                    data={"discovery_data": discovery_data, "emitter": self.uuid},
+                    context_id=context_id,
+                )
+
                 # Send discovery message to this seller (identified by context_id)
                 response = await messenger.send_discovery(
-                    discovery_data={
-                        "type": "round_started",
-                        "round_number": round_num,
-                        "total_rounds": state.total_rounds,
-                        "message": market_info_message,
-                    },
+                    discovery_data=discovery_data,
                     context_id=context_id,
                 )
 
@@ -353,6 +410,7 @@ class ReverseAuctionCoordinator(Coordinator):
             event_type=EventType.DISCOVERY_RECEIVED,
             data={
                 "discovery_data": message.discovery_data or {},
+                "emitter": self.uuid,
             },
             context_id=message.context_id,
         )
@@ -380,6 +438,7 @@ class ReverseAuctionCoordinator(Coordinator):
             data={
                 "offer": offer.to_dict(),
                 "round": state.current_round,
+                "emitter": self.uuid,
             },
             context_id=message.context_id,
         )
@@ -434,13 +493,14 @@ class ReverseAuctionCoordinator(Coordinator):
                 "reason": reason,
                 "total_offers": len(all_offers),
                 "all_offers": [o.to_dict() for o in all_offers],
+                "emitter": self.uuid,
             }
         elif status == "cancelled":
             event_type = EventType.SESSION_CANCELLED
-            event_data = {"reason": reason}
+            event_data = {"reason": reason, "emitter": self.uuid}
         else:  # failed
             event_type = EventType.SESSION_FAILED
-            event_data = {"reason": reason}
+            event_data = {"reason": reason, "emitter": self.uuid}
 
         self.state_manager.emit_event(
             session_id=session_id,
@@ -503,7 +563,7 @@ class ReverseAuctionCoordinator(Coordinator):
         self.state_manager.emit_event(
             session_id=session_id,
             event_type=EventType.SESSION_CANCELLED,
-            data={"reason": "Cancelled by user"},
+            data={"reason": "Cancelled by user", "emitter": self.uuid},
         )
 
         logger.info(

@@ -42,6 +42,7 @@ class EventType(Enum):
     OFFER_REJECTED = "offer_rejected"
 
     # Discovery events
+    DISCOVERY_MESSAGE = "discovery_message"
     DISCOVERY_SENT = "discovery_sent"
     DISCOVERY_RECEIVED = "discovery_received"
 
@@ -117,7 +118,7 @@ class Event:
         Args:
             session_id: Session this event belongs to
             event_type: Type of event
-            data: Event-specific data (offer details, prices, etc.)
+            data: Event-specific data (offer details, prices, emitter UUID, etc.)
             context_id: Which context triggered this (optional)
             metadata: Additional metadata (optional)
 

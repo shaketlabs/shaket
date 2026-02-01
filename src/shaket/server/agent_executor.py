@@ -69,6 +69,7 @@ class ShaketAgentExecutor(AgentExecutor):
         context_to_session_map: Dict[str, str],
         negotiation_agent: Optional[NegotiationAgent] = None,
         reverse_auction_agent: Optional[ReverseAuctionAgent] = None,
+        uuid: Optional[str] = None,
     ):
         """
         Initialize executor.
@@ -78,11 +79,13 @@ class ShaketAgentExecutor(AgentExecutor):
             context_to_session_map: Mapping of context_id to session_id
             negotiation_agent: Optional user-provided server negotiation agent
             reverse_auction_agent: Optional user-provided server reverse auction agent
+            uuid: UUID of the server that owns this executor
         """
         self.state_manager = state_manager
         self._context_to_session = context_to_session_map
         self.negotiation_agent = negotiation_agent
         self.reverse_auction_agent = reverse_auction_agent
+        self.uuid = uuid
 
     async def execute(
         self,
@@ -304,7 +307,7 @@ class ShaketAgentExecutor(AgentExecutor):
                 self.state_manager.emit_event(
                     session_id=session_id,
                     event_type=EventType.OFFER_RECEIVED,
-                    data={"offer": offer.to_dict()},
+                    data={"offer": offer.to_dict(), "emitter": self.uuid},
                     context_id=context_id,
                 )
                 logger.info(
@@ -317,7 +320,7 @@ class ShaketAgentExecutor(AgentExecutor):
                 self.state_manager.emit_event(
                     session_id=session_id,
                     event_type=EventType.OFFER_ACCEPTED,
-                    data={"action_data": parsed.action_data},
+                    data={"action_data": parsed.action_data, "emitter": self.uuid},
                     context_id=context_id,
                 )
                 logger.info(
@@ -336,7 +339,8 @@ class ShaketAgentExecutor(AgentExecutor):
                             )
                             if parsed.action_data
                             else "Cancelled"
-                        )
+                        ),
+                        "emitter": self.uuid,
                     },
                     context_id=context_id,
                 )
@@ -349,6 +353,7 @@ class ShaketAgentExecutor(AgentExecutor):
                 event_type=EventType.DISCOVERY_RECEIVED,
                 data={
                     "discovery_data": parsed.discovery_data or {},
+                    "emitter": self.uuid,
                 },
                 context_id=context_id,
             )
@@ -406,7 +411,7 @@ class ShaketAgentExecutor(AgentExecutor):
             self.state_manager.emit_event(
                 session_id=session_id,
                 event_type=EventType.OFFER_SENT,
-                data={"offer": offer.to_dict()},
+                data={"offer": offer.to_dict(), "emitter": self.uuid},
                 context_id=context_id,
             )
 
@@ -427,7 +432,7 @@ class ShaketAgentExecutor(AgentExecutor):
             self.state_manager.emit_event(
                 session_id=session_id,
                 event_type=EventType.OFFER_ACCEPTED,
-                data={"offer_id": action.offer_id},
+                data={"offer_id": action.offer_id, "emitter": self.uuid},
                 context_id=context_id,
             )
 
@@ -435,7 +440,7 @@ class ShaketAgentExecutor(AgentExecutor):
             self.state_manager.emit_event(
                 session_id=session_id,
                 event_type=EventType.SESSION_COMPLETED,
-                data={"reason": "Offer accepted"},
+                data={"reason": "Offer accepted", "emitter": self.uuid},
             )
 
             logger.info(f"[ShaketAgentExecutor] Accepting offer: {action.offer_id}")
@@ -458,6 +463,14 @@ class ShaketAgentExecutor(AgentExecutor):
             discovery_data = action.discovery_data or {}
             if action.message:
                 discovery_data["message"] = action.message
+
+            # Emit event to record the discovery we're sending
+            self.state_manager.emit_event(
+                session_id=session_id,
+                event_type=EventType.DISCOVERY_SENT,
+                data={"discovery_data": discovery_data, "emitter": self.uuid},
+                context_id=context_id,
+            )
 
             logger.info(f"[ShaketAgentExecutor] Sending discovery: {action.message}")
 
@@ -520,6 +533,7 @@ class ShaketAgentExecutor(AgentExecutor):
             session_type=session_type,
             role=our_role,
             items_per_seller=items_per_seller,
+            emitter=self.uuid,
         )
         if not state:
             logger.error(f"[ShaketAgentExecutor] Failed to create session {session_id}")
@@ -538,6 +552,7 @@ class ShaketAgentExecutor(AgentExecutor):
         # Return ACK action message with context_id
         ack_data = {
             "context_id": context_id,
+            "uuid": self.uuid,
             "status": "initialized",
             "session_type": session_type.value,
             "item": item.name,
@@ -611,6 +626,7 @@ class ShaketAgentExecutor(AgentExecutor):
                 "reason": "Offer accepted by counterparty",
                 "final_price": state.last_offer_sent.price,
                 "accepted_offer_id": offer_id,
+                "emitter": self.uuid,
             },
         )
 

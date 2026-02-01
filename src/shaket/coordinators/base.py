@@ -39,6 +39,7 @@ class Coordinator(ABC):
         self,
         agent: Optional[NegotiationAgent | ReverseAuctionAgent] = None,
         state_manager: Optional[StateManager] = None,
+        uuid: Optional[str] = None,
     ):
         """
         Initialize coordinator.
@@ -46,9 +47,11 @@ class Coordinator(ABC):
         Args:
             agent: Optional user-provided agent for validation/chat
             state_manager: Shared state manager (required)
+            uuid: UUID of the client/server that owns this coordinator
         """
         self.agent = agent
         self.state_manager = state_manager
+        self.uuid = uuid
 
     @abstractmethod
     async def start_session(

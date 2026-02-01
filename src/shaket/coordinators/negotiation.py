@@ -37,6 +37,7 @@ class NegotiationCoordinator(Coordinator):
         agent: Optional[NegotiationAgent] = None,
         connection_manager=None,
         state_manager=None,
+        uuid: Optional[str] = None,
     ):
         """
         Initialize negotiation coordinator.
@@ -45,8 +46,9 @@ class NegotiationCoordinator(Coordinator):
             agent: Optional user-provided negotiation agent
             connection_manager: Connection manager for accessing connections
             state_manager: Shared state manager
+            uuid: UUID of the client/server that owns this coordinator
         """
-        super().__init__(agent, state_manager)
+        super().__init__(agent, state_manager, uuid)
         self.connection_manager = connection_manager
 
     async def start(
@@ -155,7 +157,7 @@ class NegotiationCoordinator(Coordinator):
                     self.state_manager.emit_event(
                         session_id=session_id,
                         event_type=EventType.OFFER_SENT,
-                        data={"offer": offer.to_dict()},
+                        data={"offer": offer.to_dict(), "emitter": self.uuid},
                     )
 
                     # Send the offer
@@ -188,7 +190,8 @@ class NegotiationCoordinator(Coordinator):
                             "action_data": {
                                 "offer_id": action.offer_id,
                                 "message": action.message,
-                            }
+                            },
+                            "emitter": self.uuid,
                         },
                     )
 
@@ -219,6 +222,13 @@ class NegotiationCoordinator(Coordinator):
                     discovery_data = action.discovery_data or {}
                     if action.message:
                         discovery_data["message"] = action.message
+
+                    # Emit event to record the discovery we're sending
+                    self.state_manager.emit_event(
+                        session_id=session_id,
+                        event_type=EventType.DISCOVERY_SENT,
+                        data={"discovery_data": discovery_data, "emitter": self.uuid},
+                    )
 
                     response = await messenger.send_discovery(
                         discovery_data=discovery_data,
@@ -327,7 +337,7 @@ class NegotiationCoordinator(Coordinator):
         self.state_manager.emit_event(
             session_id=session_id,
             event_type=EventType.SESSION_STARTED,
-            data={},
+            data={"emitter": self.uuid},
         )
 
         logger.info(f"[NegotiationCoordinator] Started session {session_id}")
@@ -396,6 +406,7 @@ class NegotiationCoordinator(Coordinator):
             event_type=EventType.DISCOVERY_RECEIVED,
             data={
                 "discovery_data": message.discovery_data or {},
+                "emitter": self.uuid,
             },
             context_id=message.context_id,
         )
@@ -427,7 +438,7 @@ class NegotiationCoordinator(Coordinator):
         self.state_manager.emit_event(
             session_id=session_id,
             event_type=EventType.OFFER_RECEIVED,
-            data={"offer": offer.to_dict()},
+            data={"offer": offer.to_dict(), "emitter": self.uuid},
             context_id=message.context_id,
         )
 
@@ -435,7 +446,7 @@ class NegotiationCoordinator(Coordinator):
         self.state_manager.emit_event(
             session_id=session_id,
             event_type=EventType.NEGOTIATION_ROUND_STARTED,
-            data={"round_number": state.current_round + 1},
+            data={"round_number": state.current_round + 1, "emitter": self.uuid},
         )
 
         # Check if max rounds reached
@@ -465,7 +476,7 @@ class NegotiationCoordinator(Coordinator):
             self.state_manager.emit_event(
                 session_id=session_id,
                 event_type=EventType.OFFER_ACCEPTED,
-                data={"action_data": message.action_data},
+                data={"action_data": message.action_data, "emitter": self.uuid},
                 context_id=message.context_id,
             )
 
@@ -481,7 +492,7 @@ class NegotiationCoordinator(Coordinator):
             self.state_manager.emit_event(
                 session_id=session_id,
                 event_type=EventType.SESSION_CANCELLED,
-                data={"reason": "Cancelled by counterparty"},
+                data={"reason": "Cancelled by counterparty", "emitter": self.uuid},
                 context_id=message.context_id,
             )
 
@@ -517,13 +528,13 @@ class NegotiationCoordinator(Coordinator):
             self.state_manager.emit_event(
                 session_id=session_id,
                 event_type=EventType.SESSION_COMPLETED,
-                data={"reason": reason},
+                data={"reason": reason, "emitter": self.uuid},
             )
         elif status == "failed":
             self.state_manager.emit_event(
                 session_id=session_id,
                 event_type=EventType.SESSION_FAILED,
-                data={"reason": reason},
+                data={"reason": reason, "emitter": self.uuid},
             )
 
         result_data = {
@@ -593,13 +604,13 @@ class NegotiationCoordinator(Coordinator):
             self.state_manager.emit_event(
                 session_id=session_id,
                 event_type=EventType.TIMEOUT_REACHED,
-                data={"timeout_seconds": timeout},
+                data={"timeout_seconds": timeout, "emitter": self.uuid},
             )
             # Mark as failed
             self.state_manager.emit_event(
                 session_id=session_id,
                 event_type=EventType.SESSION_FAILED,
-                data={"reason": "Timeout reached"},
+                data={"reason": "Timeout reached", "emitter": self.uuid},
             )
 
     async def get_session_status(self, session_id: str) -> Optional[Dict[str, Any]]:
@@ -630,7 +641,7 @@ class NegotiationCoordinator(Coordinator):
         self.state_manager.emit_event(
             session_id=session_id,
             event_type=EventType.SESSION_CANCELLED,
-            data={"reason": "Cancelled by coordinator"},
+            data={"reason": "Cancelled by coordinator", "emitter": self.uuid},
         )
 
         logger.info(f"[NegotiationCoordinator] Session {session_id} cancelled")

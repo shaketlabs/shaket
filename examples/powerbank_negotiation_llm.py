@@ -407,6 +407,8 @@ async def main(show_state: bool = False):
         print("=" * 60 + "\n")
 
     client = await ShaketClient.create(
+        name="PowerBank Buyer (LLM)",
+        description="AI-powered buyer looking for power bank deals",
         remote_agent_urls=["http://localhost:8001"],
         negotiation_agent=buyer_agent,
         on_session_complete=on_complete,

@@ -5,6 +5,7 @@ Provides tools for LLM agents to respond to incoming negotiation and auction req
 """
 
 import logging
+import uuid
 from typing import Optional, List, Dict
 
 import uvicorn
@@ -70,6 +71,7 @@ class ShaketServer:
             streaming: Whether to support streaming responses
             state_manager: Optional custom state manager
         """
+        self.uuid = str(uuid.uuid4())
         self.name = name
         self.description = description
         self.supported_session_types = supported_session_types
@@ -99,6 +101,7 @@ class ShaketServer:
             context_to_session_map=self._context_to_session,
             negotiation_agent=negotiation_agent,
             reverse_auction_agent=reverse_auction_agent,
+            uuid=self.uuid,
         )
 
         # Create request handler

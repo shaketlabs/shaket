@@ -112,38 +112,71 @@ def print_detailed_state(client, servers):
 
 
 class SimpleBuyerAgent:
-    """Buyer agent: collects offers from sellers and provides market feedback."""
+    """Buyer agent: provides market feedback to sellers before each round.
+
+    Called by ReverseAuctionCoordinator at the start of each round (after
+    BIDDING_ROUND_STARTED event is emitted). The agent sees:
+    - state.current_round = N (the current round)
+    - state.offers_by_round contains offers from rounds 1..N-1
+    """
 
     def __init__(self, target_price: float = 70):
         self.target_price = target_price
 
     async def decide_next_action(self, session_id: str, state):
         """
-        Buyer can send market info to sellers after each round.
+        Provide market feedback for the current round.
+
+        Called at the START of each round, so we look at offers from the
+        previous round to provide feedback.
         """
-        # Get offers from current round
-        current_offers = state.offers_by_round.get(state.current_round, [])
+        current_round = state.current_round
+        prev_round = current_round - 1
 
-        if current_offers:
-            prices = [o.price for o in current_offers]
-            min_price = min(prices)
-            max_price = max(prices)
-            avg_price = sum(prices) / len(prices)
+        # Get offers from previous round (current round just started, no offers yet)
+        prev_offers = state.offers_by_round.get(prev_round, []) if prev_round > 0 else []
 
-            # Send market feedback to sellers
+        if not prev_offers:
+            # Round 1 - no previous offers, send opening message
             return SendDiscoveryAction(
-                message=f"Round {state.current_round} market info",
+                message=f"Round {current_round} starting. Looking for competitive offers! Target budget: ${self.target_price:.0f}",
                 discovery_data={
-                    "round": state.current_round,
-                    "min_offer": min_price,
-                    "max_offer": max_price,
-                    "avg_offer": avg_price,
-                    "num_offers": len(current_offers),
+                    "target_hint": f"Budget around ${self.target_price:.0f}",
                 },
             )
 
+        # Have previous round data - provide market feedback
+        prices = [o.price for o in prev_offers]
+        min_price = min(prices)
+        max_price = max(prices)
+        avg_price = sum(prices) / len(prices)
+
+        # Craft strategic feedback based on how close to target
+        if min_price > self.target_price * 1.2:
+            urgency = "Need significantly lower prices to compete!"
+        elif min_price > self.target_price:
+            urgency = "Getting closer, keep pushing!"
+        else:
+            urgency = "Good progress!"
+
+        # Format message to include "Lowest offer: $X" so seller agents can parse it
+        # (SimpleSellerAgent looks for this pattern to adjust prices)
         return SendDiscoveryAction(
-            message="Waiting for offers", discovery_data={"round": state.current_round}
+            message=(
+                f"Round {current_round} starting. {urgency}\n\n"
+                f"Previous round (Round {prev_round}) market info:\n"
+                f"- {len(prices)} offers received\n"
+                f"- Lowest offer: ${min_price:.2f}\n"
+                f"- Highest offer: ${max_price:.2f}\n"
+                f"- Average offer: ${avg_price:.2f}\n\n"
+                f"Target: ${self.target_price:.0f}. Adjust your price to be competitive!"
+            ),
+            discovery_data={
+                "prev_round_min": min_price,
+                "prev_round_max": max_price,
+                "prev_round_avg": avg_price,
+                "target": self.target_price,
+            },
         )
 
 
@@ -408,6 +441,8 @@ async def main(show_state: bool = False):
         print("=" * 70 + "\n")
 
     client = await ShaketClient.create(
+        name="PowerBank Buyer",
+        description="Buyer running reverse auction for power banks",
         remote_agent_urls=[f"http://localhost:{8001+i}" for i in range(5)],
         reverse_auction_agent=buyer_agent,
         on_session_complete=on_complete,

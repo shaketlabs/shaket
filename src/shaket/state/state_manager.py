@@ -60,6 +60,7 @@ class StateManager:
         session_type: SessionType,
         role: AgentRole,
         items_per_seller: Optional[Dict[str, Item]] = None,
+        emitter: Optional[str] = None,
         **kwargs,
     ) -> SessionState:
         """
@@ -75,6 +76,7 @@ class StateManager:
             session_type: Type of session
             role: This agent's role (buyer/seller)
             items_per_seller: Dict mapping endpoint to Item for that seller
+            emitter: UUID of the client/server creating this session
             **kwargs: Session-type-specific fields
 
         Returns:
@@ -110,6 +112,8 @@ class StateManager:
             "session_type": session_type.value,
             "role": role.value,
         }
+        if emitter:
+            event_data["emitter"] = emitter
         if items_per_seller:
             event_data["items_count"] = len(items_per_seller)
             event_data["item_ids"] = [item.id for item in items_per_seller.values()]
@@ -233,7 +237,7 @@ class StateManager:
         Args:
             session_id: Session ID
             event_type: Type of event
-            data: Event-specific data
+            data: Event-specific data (should include "emitter" key with UUID)
             context_id: Which context triggered this
             metadata: Additional metadata
 
@@ -248,6 +252,7 @@ class StateManager:
                 data={
                     "offer": offer.to_dict(),
                     "round": 1,
+                    "emitter": "client-uuid-123",
                 },
                 context_id="ctx-buyer1",
             )
